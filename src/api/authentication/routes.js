@@ -11,9 +11,20 @@ const routes = (handler) => [
  },
  {
   method: 'GET',
-  path: '/user/{id}',
+  path: '/user',
   handler: handler.getUser,
+  options: {
+   auth: 'eshop_jwt',
+  },
  },
+ //  {
+ //   method: 'PUT',
+ //   path: '/auth/{id}/role',
+ //   handler: handler.putUserRoleById,
+ //   options: {
+ //    auth: 'eshop_jwt',
+ //   },
+ //  },
 ];
 
 module.exports = routes;

@@ -1,8 +1,11 @@
 require('dotenv').config();
 
 const Hapi = require('@hapi/hapi');
-
 const Database = require('./conf/Database');
+const ClientError = require('./exceptions/ClientError');
+const Jwt = require('@hapi/jwt');
+const path = require('path');
+const Inert = require('@hapi/inert');
 
 // authentication
 const authentication = require('./api/authentication');
@@ -14,10 +17,25 @@ const products = require('./api/products');
 const ProductsService = require('./services/mysql/ProductsService');
 const ProductsValidator = require('./validator/products');
 
+// carts
+const carts = require('./api/carts');
+const CartsService = require('./services/mysql/CartsService');
+const CartsValidator = require('./validator/carts');
+
+// transactions
+const transactions = require('./api/transactions');
+const TransactionsService = require('./services/mysql/TransactionsService');
+
+// storage
+const StorageService = require('./services/storage/StorageService');
+
 const init = async () => {
  const database = new Database();
  const authenticationService = new AuthenticationService(database);
  const productsService = new ProductsService(database);
+ const cartsService = new CartsService(database);
+ const transactionsService = new TransactionsService(database);
+ const storageService = new StorageService(path.resolve(__dirname, 'api/products/images'));
 
  const server = Hapi.server({
   host: process.env.HOST,
@@ -29,7 +47,41 @@ const init = async () => {
   },
  });
 
- // register internal plugins
+ server.route({
+  method: 'GET',
+  path: '/',
+  handler: () => ({
+   name: 'Ar-Kun',
+  }),
+ });
+
+ // register external plugin
+ await server.register([
+  {
+   plugin: Jwt,
+  },
+  {
+   plugin: Inert,
+  },
+ ]);
+
+ // defines authentication strategy
+ server.auth.strategy('eshop_jwt', 'jwt', {
+  keys: process.env.TOKEN_KEY,
+  verify: {
+   aud: false,
+   iss: false,
+   sub: false,
+  },
+  validate: (artifacts) => ({
+   isValid: true,
+   credentials: {
+    id: artifacts.decoded.payload.id,
+   },
+  }),
+ });
+
+ //  register internal plugin
  await server.register([
   {
    plugin: authentication,
@@ -41,19 +93,25 @@ const init = async () => {
   {
    plugin: products,
    options: {
-    service: productsService,
+    productsService,
+    storageService,
     validator: ProductsValidator,
    },
   },
+  {
+   plugin: carts,
+   options: {
+    service: cartsService,
+    validator: CartsValidator,
+   },
+  },
+  {
+   plugin: transactions,
+   options: {
+    service: transactionsService,
+   },
+  },
  ]);
-
- server.route({
-  method: 'GET',
-  path: '/',
-  handler: () => ({
-   name: 'Ar-Kun',
-  }),
- });
 
  // extension
  server.ext('onPreResponse', (request, h) => {
